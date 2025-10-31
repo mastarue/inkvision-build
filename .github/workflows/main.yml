@@ -12,14 +12,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Flutter 3.24.0
+      - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: "3.24.0"
 
       - name: Install tools
         run: |
-          sudo apt-get update
+          sudo apt-get update -y
           sudo apt-get install -y unzip rsync
 
       - name: Prepare workspace
@@ -35,17 +35,19 @@ jobs:
           rsync -a workspace/src/assets/ workspace/inkvision_build/assets/ || true
           cp workspace/src/pubspec.yaml workspace/inkvision_build/pubspec.yaml
 
-      - name: Update Kotlin/Gradle
+      - name: Patch Kotlin and Gradle
         working-directory: workspace/inkvision_build/android
         run: |
-          sed -i 's/ext\.kotlin_version = .*/ext.kotlin_version = "1.9.25"/' build.gradle || true
-          sed -i 's#distributionUrl=.*#distributionUrl=https://services.gradle.org/distributions/gradle-8.2-all.zip#' gradle/wrapper/gradle-wrapper.properties || true
+          echo "Patching Kotlin and Gradle versions..."
+          sed -i "s/ext.kotlin_version = .*/ext.kotlin_version = '1.9.0'/" build.gradle || true
+          sed -i "s#distributionUrl=.*#distributionUrl=https://services.gradle.org/distributions/gradle-8.2-all.zip#" gradle/wrapper/gradle-wrapper.properties || true
+          echo "Build.gradle and Gradle wrapper patched."
 
-      - name: Get packages
+      - name: Fetch Flutter packages
         working-directory: workspace/inkvision_build
         run: flutter pub get
 
-      - name: Build APK (debug)
+      - name: Build APK
         working-directory: workspace/inkvision_build
         run: flutter build apk --debug
 
