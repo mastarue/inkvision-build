@@ -85,10 +85,11 @@ jobs:
         env:
           ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
         run: |
+          echo "Cleaning Flutter project..."
           flutter clean
-          ./gradlew -p android clean --no-daemon || true
           flutter pub get
-          flutter build apk --debug
+          echo "Building debug APK..."
+          flutter build apk --debug --verbose
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
