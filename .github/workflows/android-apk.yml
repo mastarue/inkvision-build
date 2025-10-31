@@ -1,0 +1,39 @@
+name: Build Android APK (from ZIP)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+
+      - name: Install unzip
+        run: sudo apt-get update && sudo apt-get install -y unzip
+
+      - name: Unzip project
+        run: |
+          mkdir project
+          unzip -q inkvision_demo_themed_upload_ready.zip -d project
+          cd project
+          flutter create .
+          flutter pub get
+
+      - name: Build APK (debug)
+        working-directory: project
+        run: flutter build apk --debug
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: inkvision-demo-apk
+          path: project/build/app/outputs/flutter-apk/app-debug.apk
