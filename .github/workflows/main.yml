@@ -38,18 +38,19 @@ jobs:
       - name: Patch Kotlin and Gradle
         working-directory: workspace/inkvision_build/android
         run: |
-          echo "Patching Kotlin and Gradle versions..."
-          sed -i "s/ext.kotlin_version = .*/ext.kotlin_version = '1.9.0'/" build.gradle || true
-          sed -i "s#distributionUrl=.*#distributionUrl=https://services.gradle.org/distributions/gradle-8.2-all.zip#" gradle/wrapper/gradle-wrapper.properties || true
-          echo "Build.gradle and Gradle wrapper patched."
+          echo "Setting Kotlin 1.7.10 and Gradle 8.2"
+          sed -i "s/ext.kotlin_version = .*/ext.kotlin_version = '1.7.10'/" build.gradle || true
+          sed -i "s#distributionUrl=.*#distributionUrl=https://services.gradle.org/distributions/gradle-8.2-all.zip#" gradle/wrapper/gradle-wrapper.properties
+          grep kotlin build.gradle || true
+          grep distributionUrl gradle/wrapper/gradle-wrapper.properties || true
 
-      - name: Fetch Flutter packages
+      - name: Get Flutter packages
         working-directory: workspace/inkvision_build
         run: flutter pub get
 
       - name: Build APK
         working-directory: workspace/inkvision_build
-        run: flutter build apk --debug
+        run: flutter build apk --debug --verbose
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
