@@ -1,0 +1,56 @@
+name: Build Android APK (from ZIP)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter 3.24.0
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.24.0"
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip rsync
+
+      - name: Prepare workspace
+        run: |
+          mkdir -p workspace/src
+          unzip -q inkvision_demo_themed_upload_ready.zip -d workspace/src
+          flutter create workspace/inkvision_build
+
+      - name: Inject Inkvision source
+        run: |
+          rsync -a --delete workspace/src/lib/ workspace/inkvision_build/lib/
+          mkdir -p workspace/inkvision_build/assets
+          rsync -a workspace/src/assets/ workspace/inkvision_build/assets/ || true
+          cp workspace/src/pubspec.yaml workspace/inkvision_build/pubspec.yaml
+
+      - name: Update Kotlin/Gradle
+        working-directory: workspace/inkvision_build/android
+        run: |
+          sed -i 's/ext\.kotlin_version = .*/ext.kotlin_version = "1.9.25"/' build.gradle || true
+          sed -i 's#distributionUrl=.*#distributionUrl=https://services.gradle.org/distributions/gradle-8.2-all.zip#' gradle/wrapper/gradle-wrapper.properties || true
+
+      - name: Get packages
+        working-directory: workspace/inkvision_build
+        run: flutter pub get
+
+      - name: Build APK (debug)
+        working-directory: workspace/inkvision_build
+        run: flutter build apk --debug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: inkvision-demo-apk
+          path: workspace/inkvision_build/build/app/outputs/flutter-apk/app-debug.apk
