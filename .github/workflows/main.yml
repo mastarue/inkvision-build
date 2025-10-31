@@ -31,7 +31,30 @@ jobs:
           sudo apt-get install -y unzip rsync
 
       - name: Prepare workspace
-        run: |
+      - name: Install Android cmdline-tools + SDK 34
+  env:
+    ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    JAVA_HOME: /usr/lib/jvm/temurin-17-jdk-amd64
+  run: |
+    set -e
+    echo "Downloading Android cmdline-tools…"
+    mkdir -p $ANDROID_SDK_ROOT/cmdline-tools
+    curl -L -o /tmp/cmdline-tools.zip \
+      https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+    unzip -q /tmp/cmdline-tools.zip -d /tmp/
+    rm -rf $ANDROID_SDK_ROOT/cmdline-tools/latest
+    mv /tmp/cmdline-tools $ANDROID_SDK_ROOT/cmdline-tools/latest
+
+    export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
+
+    echo "Accepting licenses…"
+    yes | sdkmanager --licenses
+
+    echo "Installing platform 34 + build-tools 34.0.0…"
+    yes | sdkmanager "platforms;android-34" "platform-tools" "build-tools;34.0.0"
+
+    echo "Installed build-tools:"
+    ls -la $ANDROID_SDK_ROOT/build-tools
           mkdir -p workspace/src
           unzip -q inkvision_demo_themed_upload_ready.zip -d workspace/src
           flutter create workspace/inkvision_build
