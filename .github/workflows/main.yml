@@ -18,66 +18,19 @@ jobs:
         with:
           flutter-version: "3.24.0"
 
-      # ✅ AGP needs Java 17
-      - name: Setup Java 17
+      - name: Setup Java 17 (Temurin)
         uses: actions/setup-java@v4
         with:
-          distribution: "temurin"
+          distribution: temurin
           java-version: "17"
 
       - name: Install tools
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y unzip rsync
+          sudo apt-get install -y unzip rsync curl
 
       - name: Prepare workspace
-      - name: - name: Install Android cmdline-tools + SDK 34
-        env:
-          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
-          JAVA_HOME: /usr/lib/jvm/temurin-17-jdk-amd64
         run: |
-          set -e
-          echo "Downloading Android cmdline-tools…"
-          mkdir -p $ANDROID_SDK_ROOT/cmdline-tools
-          curl -L -o /tmp/cmdline-tools.zip \
-            https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-          unzip -q /tmp/cmdline-tools.zip -d /tmp/
-          rm -rf $ANDROID_SDK_ROOT/cmdline-tools/latest
-          mv /tmp/cmdline-tools $ANDROID_SDK_ROOT/cmdline-tools/latest
-
-          export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
-
-          echo "Accepting licenses…"
-          yes | sdkmanager --licenses
-
-          echo "Installing platform 34 + build-tools 34.0.0…"
-          yes | sdkmanager "platforms;android-34" "platform-tools" "build-tools;34.0.0"
-
-          echo "Installed build-tools:"
-          ls -la $ANDROID_SDK_ROOT/build-tools
-  env:
-    ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
-    JAVA_HOME: /usr/lib/jvm/temurin-17-jdk-amd64
-  run: |
-    set -e
-    echo "Downloading Android cmdline-tools…"
-    mkdir -p $ANDROID_SDK_ROOT/cmdline-tools
-    curl -L -o /tmp/cmdline-tools.zip \
-      https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-    unzip -q /tmp/cmdline-tools.zip -d /tmp/
-    rm -rf $ANDROID_SDK_ROOT/cmdline-tools/latest
-    mv /tmp/cmdline-tools $ANDROID_SDK_ROOT/cmdline-tools/latest
-
-    export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
-
-    echo "Accepting licenses…"
-    yes | sdkmanager --licenses
-
-    echo "Installing platform 34 + build-tools 34.0.0…"
-    yes | sdkmanager "platforms;android-34" "platform-tools" "build-tools;34.0.0"
-
-    echo "Installed build-tools:"
-    ls -la $ANDROID_SDK_ROOT/build-tools
           mkdir -p workspace/src
           unzip -q inkvision_demo_themed_upload_ready.zip -d workspace/src
           flutter create workspace/inkvision_build
@@ -89,12 +42,56 @@ jobs:
           rsync -a workspace/src/assets/ workspace/inkvision_build/assets/ || true
           cp workspace/src/pubspec.yaml workspace/inkvision_build/pubspec.yaml
 
-      # ✅ Ensure recent Android SDK + build-tools are present
-      - name: Install Android SDK platform and build-tools 34
+      # --- Fix: ensure cmdline-tools exist, accept licenses, install SDK 34 + build-tools 34.0.0
+      - name: Install Android cmdline-tools + SDK 34
         env:
-          ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
           ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
-          JAVA_HOME: ${{ steps.javastep.outputs.path }}
         run: |
-          yes | ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --licenses || true
-          yes | ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "platform-tools" "build-tools;34.
+          set -e
+          echo "Downloading Android cmdline-tools…"
+          mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
+          curl -L -o /tmp/cmdline-tools.zip \
+            https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q /tmp/cmdline-tools.zip -d /tmp/
+          rm -rf "$ANDROID_SDK_ROOT/cmdline-tools/latest"
+          mv /tmp/cmdline-tools "$ANDROID_SDK_ROOT/cmdline-tools/latest"
+
+          export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
+
+          echo "Accepting licenses…"
+          yes | sdkmanager --licenses
+
+          echo "Installing platform 34 + build-tools 34.0.0…"
+          yes | sdkmanager "platforms;android-34" "platform-tools" "build-tools;34.0.0"
+
+          echo "Installed build-tools:"
+          ls -la "$ANDROID_SDK_ROOT/build-tools"
+
+      # Keep AGP happy: Kotlin <=1.7.x + Gradle 8.2 wrapper
+      - name: Patch Kotlin and Gradle
+        working-directory: workspace/inkvision_build/android
+        run: |
+          sed -i "s/ext.kotlin_version = .*/ext.kotlin_version = '1.7.10'/" build.gradle || true
+          sed -i "s#distributionUrl=.*#distributionUrl=https://services.gradle.org/distributions/gradle-8.2-all.zip#" gradle/wrapper/gradle-wrapper.properties
+          grep kotlin build.gradle || true
+          grep distributionUrl gradle/wrapper/gradle-wrapper.properties || true
+
+      - name: Get Flutter packages
+        working-directory: workspace/inkvision_build
+        run: flutter pub get
+
+      - name: Clean and Build APK (debug)
+        working-directory: workspace/inkvision_build
+        env:
+          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+        run: |
+          flutter clean
+          ./gradlew -p android clean --no-daemon || true
+          flutter pub get
+          flutter build apk --debug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: inkvision-demo-apk
+          path: workspace/inkvision_build/build/app/outputs/flutter-apk/app-debug.apk
