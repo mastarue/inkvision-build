@@ -34,47 +34,38 @@ jobs:
           mkdir -p workspace/src
           unzip -q inkvision_demo_themed_upload_ready.zip -d workspace/src
           flutter create workspace/inkvision_build
-
-      - name: Inject Inkvision source
-        run: |
           rsync -a --delete workspace/src/lib/ workspace/inkvision_build/lib/
           mkdir -p workspace/inkvision_build/assets
           rsync -a workspace/src/assets/ workspace/inkvision_build/assets/ || true
           cp workspace/src/pubspec.yaml workspace/inkvision_build/pubspec.yaml
 
-      # --- Fix: ensure cmdline-tools exist, accept licenses, install SDK 34 + build-tools 34.0.0
       - name: Install Android cmdline-tools + SDK 34
         env:
           ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
         run: |
           set -e
-          echo "Downloading Android cmdline-tools…"
           mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
-          curl -L -o /tmp/cmdline-tools.zip \
-            https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          curl -L -o /tmp/cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
           unzip -q /tmp/cmdline-tools.zip -d /tmp/
           rm -rf "$ANDROID_SDK_ROOT/cmdline-tools/latest"
           mv /tmp/cmdline-tools "$ANDROID_SDK_ROOT/cmdline-tools/latest"
-
           export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
-
-          echo "Accepting licenses…"
           yes | sdkmanager --licenses
-
-          echo "Installing platform 34 + build-tools 34.0.0…"
           yes | sdkmanager "platforms;android-34" "platform-tools" "build-tools;34.0.0"
 
-          echo "Installed build-tools:"
-          ls -la "$ANDROID_SDK_ROOT/build-tools"
-
-      # Keep AGP happy: Kotlin <=1.7.x + Gradle 8.2 wrapper
-      - name: Patch Kotlin and Gradle
+      - name: Patch Android configs (SDK/Gradle/Kotlin)
         working-directory: workspace/inkvision_build/android
         run: |
-          sed -i "s/ext.kotlin_version = .*/ext.kotlin_version = '1.7.10'/" build.gradle || true
+          echo "org.gradle.jvmargs=-Xmx2g -Dkotlin.daemon.jvm.options=-Xmx1g" >> gradle.properties || true
           sed -i "s#distributionUrl=.*#distributionUrl=https://services.gradle.org/distributions/gradle-8.2-all.zip#" gradle/wrapper/gradle-wrapper.properties
-          grep kotlin build.gradle || true
-          grep distributionUrl gradle/wrapper/gradle-wrapper.properties || true
+          sed -i "s/ext.kotlin_version = .*/ext.kotlin_version = '1.7.10'/" build.gradle || true
+          APP=app/build.gradle
+          sed -i "s/compileSdkVersion[[:space:]]*[0-9][0-9]*/compileSdkVersion 34/g" $APP || true
+          sed -i "s/compileSdk[[:space:]]*[0-9][0-9]*/compileSdk 34/g" $APP || true
+          sed -i "s/targetSdkVersion[[:space:]]*[0-9][0-9]*/targetSdkVersion 34/g" $APP || true
+          sed -i "s/targetSdk[[:space:]]*[0-9][0-9]*/targetSdk 34/g" $APP || true
+          sed -i "s/minSdkVersion[[:space:]]*[0-9][0-9]*/minSdkVersion 21/g" $APP || true
+          sed -i "s/minSdk[[:space:]]*[0-9][0-9]*/minSdk 21/g" $APP || true
 
       - name: Get Flutter packages
         working-directory: workspace/inkvision_build
@@ -85,10 +76,8 @@ jobs:
         env:
           ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
         run: |
-          echo "Cleaning Flutter project..."
           flutter clean
           flutter pub get
-          echo "Building debug APK..."
           flutter build apk --debug --verbose
 
       - name: Upload APK
